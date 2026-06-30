@@ -40,11 +40,6 @@
     "node": ">=20"
   },
   "packageManager": "pnpm@11.9.0",
-  "pnpm": {
-    "overrides": {
-      "vite": "8.1.0"
-    }
-  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@types/node": "^26.0.1",
