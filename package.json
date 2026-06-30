@@ -1,6 +1,6 @@
 {
   "name": "cursor-agent-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Responses-compatible API bridge for Cursor Agent CLI",
   "type": "module",
   "bin": {
