@@ -1,0 +1,50 @@
+{
+  "name": "cursor-agent-bridge",
+  "version": "0.1.0",
+  "description": "Responses-compatible API bridge for Cursor Agent CLI",
+  "type": "module",
+  "bin": {
+    "cursor-agent-bridge": "./dist/cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "ci": "pnpm check && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "keywords": [
+    "cursor",
+    "codex",
+    "responses-api",
+    "openai",
+    "proxy",
+    "agent"
+  ],
+  "author": "xwartz",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.6.0",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/node": "^24.0.0",
+    "tsdown": "^0.22.3",
+    "typescript": "^6.0.3",
+    "unrun": "^0.3.1",
+    "vitest": "^4.1.9"
+  }
+}
