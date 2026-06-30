@@ -86,8 +86,10 @@ export function createResponseObject(
 export function responseTextEvents(model: string, text: string) {
   const response = createResponseObject(model, text);
   const item = response.output[0];
+  /* v8 ignore next -- createResponseObject always creates one output item. */
   if (!item) throw new Error("Responses output item was not created");
   const part = item.content[0];
+  /* v8 ignore next -- createResponseObject always creates one output text part. */
   if (!part) throw new Error("Responses output text part was not created");
 
   return [

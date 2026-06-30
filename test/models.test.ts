@@ -11,6 +11,7 @@ describe("model catalog", () => {
 Available models
 
 auto - Auto
+not a model line
 composer-2.5-fast - Composer 2.5 Fast (current, default)
 claude-4.5-sonnet - Sonnet 4.5
 `);

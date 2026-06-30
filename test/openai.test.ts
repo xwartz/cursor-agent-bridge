@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  createChatChunk,
+  createChatDoneChunk,
   createChatResponse,
   createResponseObject,
   responseTextEvents,
@@ -13,9 +15,26 @@ describe("OpenAI protocol adapters", () => {
     expect(response.choices[0]?.message.content).toBe("OK");
   });
 
-  it("creates Responses API objects", () => {
-    const response = createResponseObject("auto", "OK");
+  it("creates streaming chat chunks", () => {
+    expect(createChatChunk("id", "auto", "O", true).choices[0]?.delta).toEqual({
+      role: "assistant",
+      content: "O",
+    });
+    expect(createChatChunk("id", "auto", "K", false).choices[0]?.delta).toEqual(
+      {
+        role: undefined,
+        content: "K",
+      },
+    );
+    expect(createChatDoneChunk("id", "auto").choices[0]?.finish_reason).toBe(
+      "stop",
+    );
+  });
 
+  it("creates Responses API objects", () => {
+    const response = createResponseObject("auto", "OK", "resp_test");
+
+    expect(response.id).toBe("resp_test");
     expect(response.object).toBe("response");
     expect(response.output[0]?.content[0]?.text).toBe("OK");
   });

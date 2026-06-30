@@ -224,6 +224,7 @@ function writeSseHeaders(res: ServerResponse) {
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown) {
+  /* v8 ignore next -- this is a last-resort guard for errors after SSE headers. */
   if (res.headersSent) return;
   const body = JSON.stringify(value);
   res.writeHead(status, {

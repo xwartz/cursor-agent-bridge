@@ -12,6 +12,21 @@ describe("message adapters", () => {
     );
   });
 
+  it("extracts text from array message content", () => {
+    expect(
+      messagesToPrompt([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "hello" },
+            { type: "text", input_text: "typed" },
+            { type: "text", output_text: "done" },
+          ],
+        },
+      ]),
+    ).toBe("hello\ntyped\ndone");
+  });
+
   it("adds role markers for multi-turn prompts", () => {
     expect(
       messagesToPrompt([
@@ -39,6 +54,46 @@ describe("message adapters", () => {
     ]);
   });
 
+  it("converts string, input_text, and assistant Responses items", () => {
+    const messages = responsesToMessages({
+      input: [
+        "plain",
+        { type: "input_text", input_text: "typed" },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", output_text: "previous" }],
+        },
+        null,
+      ],
+    });
+
+    expect(messages).toEqual([
+      { role: "user", content: "plain" },
+      { role: "user", content: "typed" },
+      { role: "assistant", content: "previous" },
+    ]);
+  });
+
+  it("handles system messages, empty content, and unknown Responses items", () => {
+    const messages = responsesToMessages({
+      input: [
+        { type: "message", role: "system", content: "rules" },
+        { type: "message", role: "user", content: [] },
+        { type: "unknown", value: "ignored" },
+        { type: "input_text", text: "" },
+      ],
+    });
+
+    expect(messages).toEqual([{ role: "system", content: "rules" }]);
+  });
+
+  it("falls back to an empty user message for empty Responses input", () => {
+    expect(responsesToMessages({ input: [] })).toEqual([
+      { role: "user", content: "" },
+    ]);
+  });
+
   it("normalizes cursor-prefixed models", () => {
     expect(normalizeModel("cursor/composer-2.5-fast")).toBe(
       "composer-2.5-fast",
@@ -46,6 +101,8 @@ describe("message adapters", () => {
     expect(normalizeModel("cursor-claude-4.5-sonnet")).toBe(
       "claude-4.5-sonnet",
     );
+    expect(normalizeModel("cursor/")).toBe("auto");
+    expect(normalizeModel("cursor-")).toBe("auto");
     expect(normalizeModel(undefined)).toBe("auto");
   });
 });

@@ -7,7 +7,7 @@ Responses-compatible API bridge for the Cursor Agent CLI.
 ## Requirements
 
 - Node.js 20+
-- pnpm 9+
+- pnpm 11+
 - Cursor Agent CLI installed and authenticated
 
 Install Cursor Agent and verify it first:
