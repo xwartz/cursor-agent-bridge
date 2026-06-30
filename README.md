@@ -110,3 +110,5 @@ pnpm run ci
 ```
 
 Release publishing is handled by GitHub Actions on tags named `v*`.
+The publish workflow uses npm Trusted Publishing with GitHub OIDC, so it does
+not require an `NPM_TOKEN` repository secret.

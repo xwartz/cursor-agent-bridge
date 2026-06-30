@@ -61,7 +61,8 @@ pnpm release.
 
 - CI runs on pushes and pull requests.
 - npm publishing runs from `v*` tags via GitHub Actions.
-- Publishing requires `NPM_TOKEN` in repository secrets.
+- Publishing uses npm Trusted Publishing with GitHub OIDC. Do not add
+  `NPM_TOKEN`; keep `id-token: write` in `.github/workflows/publish.yml`.
 - Published package contents are controlled by `package.json` `files`; verify
   with `npm pack --dry-run` before release-related changes.
 
