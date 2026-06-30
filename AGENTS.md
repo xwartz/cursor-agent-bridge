@@ -63,6 +63,9 @@ pnpm release.
 - npm publishing runs from `v*` tags via GitHub Actions.
 - Publishing uses npm Trusted Publishing with GitHub OIDC. Do not add
   `NPM_TOKEN`; keep `id-token: write` in `.github/workflows/publish.yml`.
+- Keep `package.json` `repository.url` equal to
+  `https://github.com/xwartz/cursor-agent-bridge`; npm provenance validates it
+  against the GitHub OIDC repository.
 - Published package contents are controlled by `package.json` `files`; verify
   with `npm pack --dry-run` before release-related changes.
 

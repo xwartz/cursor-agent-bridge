@@ -1,8 +1,16 @@
 {
   "name": "cursor-agent-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Responses-compatible API bridge for Cursor Agent CLI",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xwartz/cursor-agent-bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/xwartz/cursor-agent-bridge/issues"
+  },
+  "homepage": "https://github.com/xwartz/cursor-agent-bridge#readme",
   "bin": {
     "cursor-agent-bridge": "./dist/cli.mjs"
   },
