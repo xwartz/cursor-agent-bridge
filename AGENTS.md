@@ -26,6 +26,8 @@ HTTP endpoints for Codex custom providers and OpenAI-style clients.
   hardcoded Cursor model allowlists.
 - Bind examples to `127.0.0.1` by default. This bridge is intended for local
   use unless a caller explicitly opts into a wider bind address.
+- Keep macOS LaunchAgent support optional. Codex does not start provider
+  processes, so LaunchAgent is for convenience, not a runtime requirement.
 - Preserve TypeScript strict-mode compatibility, including
   `exactOptionalPropertyTypes`.
 
@@ -36,6 +38,8 @@ HTTP endpoints for Codex custom providers and OpenAI-style clients.
 - Refresh the lockfile, when dependency metadata actually changes:
   `npx --yes pnpm@11.9.0 install --no-frozen-lockfile`
 - Run the full local gate: `npx --yes pnpm@11.9.0 run ci`
+- Install the optional macOS background service:
+  `cursor-agent-bridge launch-agent install`
 - Run formatting and lint checks: `pnpm check`
 - Apply safe formatting fixes: `pnpm check:fix`
 - Run unit tests: `pnpm test`

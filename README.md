@@ -45,6 +45,27 @@ PORT=4646
 CURSOR_AGENT_PATH=agent
 ```
 
+## macOS LaunchAgent
+
+Codex connects to the bridge through `base_url`; it does not start the bridge
+process for you. On macOS, install a LaunchAgent if you want the bridge to start
+when you log in and restart automatically if it exits:
+
+```bash
+cursor-agent-bridge launch-agent install
+```
+
+Manage it with:
+
+```bash
+cursor-agent-bridge launch-agent status
+cursor-agent-bridge launch-agent uninstall
+```
+
+The LaunchAgent listens on `127.0.0.1:4646` by default. If you prefer manual
+control, skip this step and run `cursor-agent-bridge serve` in a terminal before
+starting Codex.
+
 ## Codex Config
 
 Add a Codex profile such as `~/.codex/cursor.config.toml`:
