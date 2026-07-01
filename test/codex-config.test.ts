@@ -5,8 +5,13 @@ import { describe, expect, it } from "vitest"
 import {
   buildCodexConfigToml,
   checkCodexConfig,
+  getCodexProviderStatus,
   parseCodexConfig,
   resolveCodexConfigPath,
+  resolveCodexSwitchBackupPath,
+  resolveCodexUserConfigPath,
+  restoreCodexProviderBackup,
+  switchCodexProvider,
   writeCodexConfig,
 } from "../src/codex-config.js"
 
@@ -35,6 +40,12 @@ wire_api = "responses"
         profile: "cursor.bad",
       }),
     ).toThrow("Invalid Codex profile")
+  })
+
+  it("resolves the user-level Codex config path", () => {
+    expect(resolveCodexUserConfigPath("/Users/test")).toBe(
+      "/Users/test/.codex/config.toml",
+    )
   })
 
   it("escapes generated TOML string values", () => {
@@ -302,6 +313,20 @@ wire_api = 'responses'
     })
   })
 
+  it("unescapes common TOML string escapes", () => {
+    const content = `model_provider = "cursor"
+
+[model_providers.cursor]
+name = "Cursor\\tAgent\\nBridge\\fTest\\rDone\\bX"
+base_url = "http://127.0.0.1:4646/v1"
+wire_api = "responses"
+`
+
+    expect(parseCodexConfig(content).providerName).toBe(
+      "Cursor\tAgent\nBridge\fTest\rDone\bX",
+    )
+  })
+
   it("parses bare TOML values used by existing hand-written configs", () => {
     const content = `model_provider = cursor
 
@@ -364,5 +389,273 @@ model = "auto"
     expect(
       parseCodexConfig(await readFile(filePath, "utf8")).modelProvider,
     ).toBe("cursor")
+  })
+
+  it("allows config write when the selected provider already matches the target profile", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-config-"))
+    const filePath = join(dir, "openai.config.toml")
+    await writeFile(
+      filePath,
+      `model_provider = "openai"
+model = "gpt-5"
+
+[model_providers.openai]
+name = "OpenAI"
+`,
+      "utf8",
+    )
+
+    const result = await writeCodexConfig({
+      filePath,
+      host: "127.0.0.1",
+      port: 4646,
+      profile: "openai",
+    })
+
+    expect(result.updated).toBe(true)
+    expect(
+      parseCodexConfig(await readFile(filePath, "utf8"), "openai"),
+    ).toMatchObject({
+      modelProvider: "openai",
+      providerName: "Cursor Agent Bridge",
+      baseUrl: "http://127.0.0.1:4646/v1",
+      wireApi: "responses",
+    })
+  })
+
+  it("switches the user config to cursor with a restorable backup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(
+      filePath,
+      `model_provider = "openai"
+model = "gpt-5.5"
+
+[mcp_servers.docs]
+command = "docs"
+`,
+      "utf8",
+    )
+
+    const result = await switchCodexProvider({
+      filePath,
+      mode: "cursor",
+      host: "127.0.0.1",
+      port: 4646,
+    })
+
+    expect(result.changed).toBe(true)
+    expect(result.backupPath).toBe(resolveCodexSwitchBackupPath(filePath))
+    expect(parseCodexConfig(await readFile(filePath, "utf8"))).toMatchObject({
+      modelProvider: "cursor",
+      model: "auto",
+      baseUrl: "http://127.0.0.1:4646/v1",
+      wireApi: "responses",
+    })
+
+    const restored = await switchCodexProvider({
+      filePath,
+      mode: "openai",
+      host: "127.0.0.1",
+      port: 4646,
+    })
+
+    expect(restored.restoredBackup).toBe(true)
+    expect(await readFile(filePath, "utf8")).toContain('model = "gpt-5.5"')
+    expect(await readFile(filePath, "utf8")).toContain("[mcp_servers.docs]")
+  })
+
+  it("does not overwrite the backup when already switched to cursor", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(filePath, 'model_provider = "openai"\n', "utf8")
+
+    await switchCodexProvider({
+      filePath,
+      mode: "cursor",
+      host: "127.0.0.1",
+      port: 4646,
+    })
+    const backupPath = resolveCodexSwitchBackupPath(filePath)
+    const originalBackup = await readFile(backupPath, "utf8")
+
+    await switchCodexProvider({
+      filePath,
+      mode: "cursor",
+      host: "127.0.0.1",
+      port: 4647,
+    })
+
+    expect(await readFile(backupPath, "utf8")).toBe(originalBackup)
+  })
+
+  it("returns unchanged when switching an already-current cursor config", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(
+      filePath,
+      buildCodexConfigToml({ host: "127.0.0.1", port: 4646 }),
+      "utf8",
+    )
+
+    await expect(
+      switchCodexProvider({
+        filePath,
+        mode: "cursor",
+        host: "127.0.0.1",
+        port: 4646,
+      }),
+    ).resolves.toEqual({
+      path: filePath,
+      mode: "cursor",
+      changed: false,
+    })
+  })
+
+  it("falls back to Codex defaults when switching to openai without a backup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(
+      filePath,
+      `model_provider = "cursor"
+model = "auto"
+
+[model_providers.cursor]
+name = "Cursor Agent Bridge"
+base_url = "http://127.0.0.1:4646/v1"
+wire_api = "responses"
+
+[mcp_servers.docs]
+command = "docs"
+`,
+      "utf8",
+    )
+
+    const result = await switchCodexProvider({
+      filePath,
+      mode: "openai",
+      host: "127.0.0.1",
+      port: 4646,
+    })
+    const content = await readFile(filePath, "utf8")
+
+    expect(result.restoredBackup).toBe(false)
+    expect(content).not.toContain('model_provider = "cursor"')
+    expect(content).not.toContain('model = "auto"')
+    expect(content).toContain("[model_providers.cursor]")
+    expect(content).toContain("[mcp_servers.docs]")
+  })
+
+  it("preserves non-cursor top-level keys when switching to openai without backup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(
+      filePath,
+      `model_provider = "cursor"
+model = "gpt-5.5"
+approval_policy = "on-request"
+`,
+      "utf8",
+    )
+
+    const result = await switchCodexProvider({
+      filePath,
+      mode: "openai",
+      host: "127.0.0.1",
+      port: 4646,
+    })
+    const content = await readFile(filePath, "utf8")
+
+    expect(result.changed).toBe(true)
+    expect(content).not.toContain('model_provider = "cursor"')
+    expect(content).toContain('model = "gpt-5.5"')
+    expect(content).toContain('approval_policy = "on-request"')
+  })
+
+  it("can switch an empty cursor config back to an empty default config", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(
+      filePath,
+      `model_provider = "cursor"
+model = "auto"
+`,
+      "utf8",
+    )
+
+    const result = await switchCodexProvider({
+      filePath,
+      mode: "openai",
+      host: "127.0.0.1",
+      port: 4646,
+    })
+
+    expect(result.changed).toBe(true)
+    expect(await readFile(filePath, "utf8")).toBe("")
+  })
+
+  it("returns unchanged when switching a default config to openai without backup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(filePath, '[mcp_servers.docs]\ncommand = "docs"\n', "utf8")
+
+    await expect(
+      switchCodexProvider({
+        filePath,
+        mode: "openai",
+        host: "127.0.0.1",
+        port: 4646,
+      }),
+    ).resolves.toEqual({
+      path: filePath,
+      mode: "openai",
+      changed: false,
+      restoredBackup: false,
+    })
+  })
+
+  it("reports current provider status", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(filePath, 'model_provider = "cursor"\n', "utf8")
+
+    await expect(getCodexProviderStatus(filePath)).resolves.toEqual({
+      path: filePath,
+      exists: true,
+      modelProvider: "cursor",
+    })
+    await expect(
+      getCodexProviderStatus(join(dir, "missing.toml")),
+    ).resolves.toEqual({
+      path: join(dir, "missing.toml"),
+      exists: false,
+      modelProvider: undefined,
+    })
+  })
+
+  it("restores the explicit switch backup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+    const backupPath = resolveCodexSwitchBackupPath(filePath)
+    await writeFile(filePath, 'model_provider = "cursor"\n', "utf8")
+    await writeFile(backupPath, 'model_provider = "openai"\n', "utf8")
+
+    const result = await restoreCodexProviderBackup(filePath)
+
+    expect(result).toEqual({
+      path: filePath,
+      backupPath,
+      changed: true,
+    })
+    expect(await readFile(filePath, "utf8")).toBe('model_provider = "openai"\n')
+  })
+
+  it("rejects restore when no switch backup exists", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-switch-"))
+    const filePath = join(dir, "config.toml")
+
+    await expect(restoreCodexProviderBackup(filePath)).rejects.toThrow(
+      "No switch backup found",
+    )
   })
 })

@@ -23,7 +23,8 @@ agent --list-models
 
 ## Install
 
-Install the package globally, then confirm the command is on your `PATH`:
+Install the package globally, then confirm the installed command is on your
+`PATH`:
 
 ```bash
 pnpm add -g cursor-agent-bridge
@@ -120,7 +121,7 @@ run `cursor-agent-bridge serve` yourself before starting Codex.
 
 ## Codex Config
 
-Create or update `~/.codex/cursor.config.toml`:
+For Codex CLI profile usage, create or update `~/.codex/cursor.config.toml`:
 
 ```bash
 cursor-agent-bridge config write
@@ -158,6 +159,37 @@ codex --profile cursor
 
 Use `/model` in Codex to pick a Cursor model. The model catalog comes from
 `agent --list-models`.
+
+## Codex IDE Switching
+
+The Codex IDE extension reads the user-level `~/.codex/config.toml`. Switch that file when you want the IDE to use Cursor Agent Bridge:
+
+```bash
+cursor-agent-bridge config switch cursor
+```
+
+Switch back to Codex's default provider:
+
+```bash
+cursor-agent-bridge config switch openai
+```
+
+Check the active provider:
+
+```bash
+cursor-agent-bridge config switch status
+```
+
+The switch command backs up the previous `~/.codex/config.toml` to
+`~/.codex/config.toml.bak.cursor-agent-bridge` before enabling Cursor. Restore
+that backup with:
+
+```bash
+cursor-agent-bridge config switch restore
+```
+
+Reload the Codex IDE window or start a new session after switching. Codex does
+not reliably hot-reload provider changes while a session is running.
 
 ## Troubleshooting
 

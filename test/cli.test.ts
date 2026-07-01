@@ -39,6 +39,7 @@ describe("CLI", () => {
     expect(result.stdout).toContain("cursor-agent-bridge upgrade")
     expect(result.stdout).toContain("cursor-agent-bridge doctor")
     expect(result.stdout).toContain("cursor-agent-bridge config write")
+    expect(result.stdout).toContain("cursor-agent-bridge config switch")
     expect(result.stdout).toContain("cursor-agent-bridge models")
   })
 
@@ -181,6 +182,93 @@ model = "auto"
     )
   })
 
+  it("switches Codex user config between cursor and openai", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-cli-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(
+      filePath,
+      `model_provider = "openai"
+model = "gpt-5.5"
+`,
+      "utf8",
+    )
+
+    const cursor = await runCli([
+      "config",
+      "switch",
+      "cursor",
+      "--file",
+      filePath,
+    ])
+
+    expect(cursor.code).toBe(0)
+    expect(cursor.stdout).toContain(
+      `Switched Codex config to cursor: ${filePath}`,
+    )
+    expect(cursor.stdout).toContain("Reload Codex IDE")
+    expect(await readFile(filePath, "utf8")).toContain(
+      'model_provider = "cursor"',
+    )
+
+    const openai = await runCli([
+      "config",
+      "switch",
+      "openai",
+      "--file",
+      filePath,
+    ])
+
+    expect(openai.code).toBe(0)
+    expect(openai.stdout).toContain(
+      `Switched Codex config to openai: ${filePath}`,
+    )
+    expect(await readFile(filePath, "utf8")).toContain('model = "gpt-5.5"')
+  })
+
+  it("prints Codex switch status", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-cli-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(filePath, 'model_provider = "cursor"\n', "utf8")
+
+    const result = await runCli([
+      "config",
+      "switch",
+      "status",
+      "--file",
+      filePath,
+    ])
+
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain(`Codex config: ${filePath}`)
+    expect(result.stdout).toContain("Current model_provider: cursor")
+  })
+
+  it("restores Codex switch backup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-cli-switch-"))
+    const filePath = join(dir, "config.toml")
+    await writeFile(filePath, 'model_provider = "openai"\n', "utf8")
+    await runCli(["config", "switch", "cursor", "--file", filePath])
+
+    const result = await runCli([
+      "config",
+      "switch",
+      "restore",
+      "--file",
+      filePath,
+    ])
+
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain("Restored Codex config")
+    expect(await readFile(filePath, "utf8")).toBe('model_provider = "openai"\n')
+  })
+
+  it("rejects unknown Codex switch targets", async () => {
+    const result = await runCli(["config", "switch", "missing"])
+
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("Unknown config switch target")
+  })
+
   it("lists models through the CLI", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
 if (process.argv.includes("--list-models")) {
@@ -196,5 +284,5 @@ if (process.argv.includes("--list-models")) {
 
     expect(result.code).toBe(0)
     expect(result.stdout.trim()).toBe("auto")
-  })
+  }, 15_000)
 })

@@ -122,6 +122,15 @@ describe("server", () => {
       await fetch(`${baseUrl}/v1/models?format=codex`),
     )
     expect(explicitCodex).toHaveProperty("models")
+
+    const codexDesktop = await readJson(
+      await fetch(`${baseUrl}/v1/models`, {
+        headers: {
+          "user-agent": "Codex Desktop/0.142.5 (Mac OS 26.5.1; arm64)",
+        },
+      }),
+    )
+    expect(codexDesktop).toHaveProperty("models")
   })
 
   it("caches model lists and supports explicit refresh", async () => {

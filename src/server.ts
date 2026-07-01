@@ -94,9 +94,7 @@ async function route(
     const models = await runner.listModels({
       refresh: url.searchParams.get("refresh") === "1",
     })
-    const wantsCodexCatalog =
-      url.searchParams.has("client_version") ||
-      url.searchParams.get("format") === "codex"
+    const wantsCodexCatalog = shouldReturnCodexModelCatalog(req, url)
     sendJson(
       res,
       200,
@@ -124,6 +122,14 @@ async function route(
       code: "not_found",
     },
   })
+}
+
+function shouldReturnCodexModelCatalog(req: IncomingMessage, url: URL) {
+  if (url.searchParams.has("client_version")) return true
+  if (url.searchParams.get("format") === "codex") return true
+
+  const userAgent = req.headers["user-agent"]
+  return typeof userAgent === "string" && /\bCodex\b/i.test(userAgent)
 }
 
 async function handleChat(

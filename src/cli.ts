@@ -8,7 +8,12 @@ import {
   buildCodexConfigToml,
   checkCodexConfig,
   DEFAULT_CODEX_PROFILE,
+  getCodexProviderStatus,
   resolveCodexConfigPath,
+  resolveCodexSwitchBackupPath,
+  resolveCodexUserConfigPath,
+  restoreCodexProviderBackup,
+  switchCodexProvider,
   writeCodexConfig,
 } from "./codex-config.js"
 import { CursorRunner } from "./cursor/runner.js"
@@ -39,6 +44,7 @@ Usage:
   cursor-agent-bridge config print [--host 127.0.0.1] [--port 4646] [--profile cursor]
   cursor-agent-bridge config check [--file ~/.codex/cursor.config.toml] [--host 127.0.0.1] [--port 4646] [--profile cursor]
   cursor-agent-bridge config write [--file ~/.codex/cursor.config.toml] [--host 127.0.0.1] [--port 4646] [--profile cursor] [--force]
+  cursor-agent-bridge config switch cursor|openai|status|restore [--file ~/.codex/config.toml] [--host 127.0.0.1] [--port 4646]
   cursor-agent-bridge models [--json] [--refresh]
   cursor-agent-bridge launch-agent install [--host 127.0.0.1] [--port 4646] [--agent-path agent]
   cursor-agent-bridge launch-agent uninstall
@@ -148,6 +154,65 @@ if (command === "config") {
       }
 
       console.log(`Start Codex with: codex --profile ${profile}`)
+      process.exit(0)
+    }
+
+    if (action === "switch") {
+      const mode = process.argv[4] ?? "status"
+      const switchFilePath =
+        readArg("--file", undefined) ?? resolveCodexUserConfigPath()
+
+      if (mode === "status") {
+        const status = await getCodexProviderStatus(switchFilePath)
+        const provider = status.modelProvider ?? "default"
+        console.log(`Codex config: ${status.path}`)
+        console.log(
+          status.exists
+            ? `Current model_provider: ${provider}`
+            : "Current model_provider: default (config file not found)",
+        )
+        console.log(
+          `Switch backup: ${resolveCodexSwitchBackupPath(status.path)}`,
+        )
+        process.exit(0)
+      }
+
+      if (mode === "restore") {
+        const result = await restoreCodexProviderBackup(switchFilePath)
+        console.log(
+          result.changed
+            ? `Restored Codex config from ${result.backupPath}`
+            : `Codex config already matches ${result.backupPath}`,
+        )
+        console.log("Reload Codex IDE or start a new session to apply it.")
+        process.exit(0)
+      }
+
+      if (mode !== "cursor" && mode !== "openai") {
+        console.error(
+          "Unknown config switch target. Use cursor, openai, status, or restore.",
+        )
+        process.exit(1)
+      }
+
+      const result = await switchCodexProvider({
+        filePath: switchFilePath,
+        host,
+        port,
+        mode,
+      })
+      console.log(
+        result.changed
+          ? `Switched Codex config to ${mode}: ${result.path}`
+          : `Codex config already uses ${mode}: ${result.path}`,
+      )
+      if (result.backupPath) console.log(`Backup: ${result.backupPath}`)
+      if (mode === "cursor") {
+        console.log(
+          `Make sure the bridge is running: cursor-agent-bridge serve --host ${host} --port ${port}`,
+        )
+      }
+      console.log("Reload Codex IDE or start a new session to apply it.")
       process.exit(0)
     }
   } catch (error) {
