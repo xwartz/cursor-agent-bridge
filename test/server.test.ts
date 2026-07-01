@@ -1,5 +1,6 @@
 import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
+import packageJson from "../package.json" with { type: "json" };
 import { startServer } from "../src/server.js";
 import { createFakeAgent, readJson } from "./helpers.js";
 
@@ -73,6 +74,7 @@ describe("server", () => {
     ).resolves.toMatchObject({
       status: "ok",
       provider: "cursor-agent-bridge",
+      version: packageJson.version,
     });
 
     const options = await fetch(`${baseUrl}/v1/models`, { method: "OPTIONS" });

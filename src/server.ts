@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import packageJson from "../package.json" with { type: "json" };
 import {
   messagesToPrompt,
   normalizeModel,
@@ -20,7 +21,7 @@ import type {
   ServerConfig,
 } from "./types.js";
 
-const packageVersion = "0.1.0";
+const packageVersion = packageJson.version;
 
 export async function startServer(config: ServerConfig = {}) {
   const port = config.port ?? Number(process.env.PORT || 4646);
