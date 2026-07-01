@@ -16,6 +16,7 @@ clients.
 Check Cursor Agent first:
 
 ```bash
+# Install from https://cursor.com/install, then authenticate the CLI.
 agent login
 agent --list-models
 ```
@@ -119,7 +120,25 @@ run `cursor-agent-bridge serve` yourself before starting Codex.
 
 ## Codex Config
 
-Create `~/.codex/cursor.config.toml`:
+Create or update `~/.codex/cursor.config.toml`:
+
+```bash
+cursor-agent-bridge config write
+```
+
+Preview the generated profile without writing a file:
+
+```bash
+cursor-agent-bridge config print
+```
+
+Validate an existing profile:
+
+```bash
+cursor-agent-bridge config check
+```
+
+The generated profile looks like this:
 
 ```toml
 model_provider = "cursor"
@@ -139,6 +158,24 @@ codex --profile cursor
 
 Use `/model` in Codex to pick a Cursor model. The model catalog comes from
 `agent --list-models`.
+
+## Troubleshooting
+
+Run a full preflight before starting Codex:
+
+```bash
+cursor-agent-bridge doctor
+```
+
+List available Cursor models without starting the HTTP server:
+
+```bash
+cursor-agent-bridge models
+cursor-agent-bridge models --json
+```
+
+If `config write` finds a different `model_provider`, pass `--force` to switch
+the profile to `cursor`.
 
 ## API
 

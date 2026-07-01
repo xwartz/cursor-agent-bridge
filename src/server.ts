@@ -1,12 +1,12 @@
-import { randomUUID } from "node:crypto";
-import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import packageJson from "../package.json" with { type: "json" };
+import { randomUUID } from "node:crypto"
+import http, { type IncomingMessage, type ServerResponse } from "node:http"
+import packageJson from "../package.json" with { type: "json" }
 import {
   messagesToPrompt,
   normalizeModel,
   responsesToMessages,
-} from "./adapter/messages.js";
-import { toCodexModelCatalog, toOpenAIModelList } from "./adapter/models.js";
+} from "./adapter/messages.js"
+import { toCodexModelCatalog, toOpenAIModelList } from "./adapter/models.js"
 import {
   createChatChunk,
   createChatDoneChunk,
@@ -15,52 +15,52 @@ import {
   createResponseStream,
   responseDeltaEvent,
   responseDoneEvents,
-} from "./adapter/openai.js";
-import { CursorRunner } from "./cursor/runner.js";
+} from "./adapter/openai.js"
+import { CursorRunner } from "./cursor/runner.js"
 import type {
   ChatCompletionRequest,
   ResponsesRequest,
   ServerConfig,
-} from "./types.js";
+} from "./types.js"
 
-const packageVersion = packageJson.version;
-const defaultMaxBodyBytes = 1024 * 1024;
+const packageVersion = packageJson.version
+const defaultMaxBodyBytes = 1024 * 1024
 
 class RequestError extends Error {
-  readonly status: number;
-  readonly code: string;
+  readonly status: number
+  readonly code: string
 
   constructor(status: number, code: string, message: string) {
-    super(message);
-    this.status = status;
-    this.code = code;
+    super(message)
+    this.status = status
+    this.code = code
   }
 }
 
 export async function startServer(config: ServerConfig = {}) {
-  const port = config.port ?? Number(process.env.PORT || 4646);
-  const host = config.host ?? process.env.HOST ?? "127.0.0.1";
+  const port = config.port ?? Number(process.env.PORT || 4646)
+  const host = config.host ?? process.env.HOST ?? "127.0.0.1"
   const runner = new CursorRunner({
     ...(config.agentPath ? { agentPath: config.agentPath } : {}),
     ...(config.defaultCwd ? { defaultCwd: config.defaultCwd } : {}),
-  });
-  const maxBodyBytes = config.maxBodyBytes ?? defaultMaxBodyBytes;
+  })
+  const maxBodyBytes = config.maxBodyBytes ?? defaultMaxBodyBytes
 
   const server = http.createServer(async (req, res) => {
     try {
-      await route(req, res, runner, maxBodyBytes);
+      await route(req, res, runner, maxBodyBytes)
     } catch (error) {
-      sendError(res, error);
+      sendError(res, error)
     }
-  });
-  server.on("close", () => runner.abortAll());
+  })
+  server.on("close", () => runner.abortAll())
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(port, host, resolve);
-    server.once("error", reject);
-  });
+    server.listen(port, host, resolve)
+    server.once("error", reject)
+  })
 
-  return server;
+  return server
 }
 
 async function route(
@@ -69,16 +69,16 @@ async function route(
   runner: CursorRunner,
   maxBodyBytes: number,
 ) {
-  setCors(res);
+  setCors(res)
   const url = new URL(
     req.url ?? "/",
     `http://${req.headers.host ?? "127.0.0.1"}`,
-  );
+  )
 
   if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
+    res.writeHead(204)
+    res.end()
+    return
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
@@ -86,35 +86,35 @@ async function route(
       status: "ok",
       provider: "cursor-agent-bridge",
       version: packageVersion,
-    });
-    return;
+    })
+    return
   }
 
   if (req.method === "GET" && url.pathname === "/v1/models") {
     const models = await runner.listModels({
       refresh: url.searchParams.get("refresh") === "1",
-    });
+    })
     const wantsCodexCatalog =
       url.searchParams.has("client_version") ||
-      url.searchParams.get("format") === "codex";
+      url.searchParams.get("format") === "codex"
     sendJson(
       res,
       200,
       wantsCodexCatalog
         ? toCodexModelCatalog(models)
         : toOpenAIModelList(models),
-    );
-    return;
+    )
+    return
   }
 
   if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
-    await handleChat(req, res, runner, maxBodyBytes);
-    return;
+    await handleChat(req, res, runner, maxBodyBytes)
+    return
   }
 
   if (req.method === "POST" && url.pathname === "/v1/responses") {
-    await handleResponses(req, res, runner, maxBodyBytes);
-    return;
+    await handleResponses(req, res, runner, maxBodyBytes)
+    return
   }
 
   sendJson(res, 404, {
@@ -123,7 +123,7 @@ async function route(
       type: "invalid_request_error",
       code: "not_found",
     },
-  });
+  })
 }
 
 async function handleChat(
@@ -132,7 +132,7 @@ async function handleChat(
   runner: CursorRunner,
   maxBodyBytes: number,
 ) {
-  const body = (await readJson(req, maxBodyBytes)) as ChatCompletionRequest;
+  const body = (await readJson(req, maxBodyBytes)) as ChatCompletionRequest
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     sendJson(res, 400, {
       error: {
@@ -140,61 +140,61 @@ async function handleChat(
         type: "invalid_request_error",
         code: "invalid_messages",
       },
-    });
-    return;
+    })
+    return
   }
 
-  const model = normalizeModel(body.model);
-  const prompt = messagesToPrompt(body.messages);
-  const abort = new AbortController();
-  req.on("close", () => abort.abort());
+  const model = normalizeModel(body.model)
+  const prompt = messagesToPrompt(body.messages)
+  const abort = new AbortController()
+  req.on("close", () => abort.abort())
 
   if (body.stream === true) {
-    const id = `chatcmpl-${randomUUID().replaceAll("-", "")}`;
-    writeSseHeaders(res);
-    let isFirst = true;
-    let lastModel = model;
-    let streamedText = "";
+    const id = `chatcmpl-${randomUUID().replaceAll("-", "")}`
+    writeSseHeaders(res)
+    let isFirst = true
+    let lastModel = model
+    let streamedText = ""
     try {
       const result = await runner.run(
         { model, prompt, signal: abort.signal },
         {
           onDelta: (text) => {
-            streamedText += text;
+            streamedText += text
             res.write(
               `data: ${JSON.stringify(createChatChunk(id, lastModel, text, isFirst))}\n\n`,
-            );
-            isFirst = false;
+            )
+            isFirst = false
           },
           onModel: (nextModel) => {
-            lastModel = nextModel;
+            lastModel = nextModel
           },
         },
-      );
-      lastModel = result.model;
+      )
+      lastModel = result.model
       if (result.text !== streamedText) {
         const delta = result.text.startsWith(streamedText)
           ? result.text.slice(streamedText.length)
-          : result.text;
+          : result.text
         if (delta) {
           res.write(
             `data: ${JSON.stringify(createChatChunk(id, lastModel, delta, isFirst))}\n\n`,
-          );
+          )
         }
       }
       res.write(
         `data: ${JSON.stringify(createChatDoneChunk(id, lastModel))}\n\n`,
-      );
-      res.write("data: [DONE]\n\n");
+      )
+      res.write("data: [DONE]\n\n")
     } catch (error) {
-      writeSseError(res, error);
+      writeSseError(res, error)
     }
-    res.end();
-    return;
+    res.end()
+    return
   }
 
-  const result = await runner.run({ model, prompt, signal: abort.signal });
-  sendJson(res, 200, createChatResponse(result.model, result.text));
+  const result = await runner.run({ model, prompt, signal: abort.signal })
+  sendJson(res, 200, createChatResponse(result.model, result.text))
 }
 
 async function handleResponses(
@@ -203,48 +203,48 @@ async function handleResponses(
   runner: CursorRunner,
   maxBodyBytes: number,
 ) {
-  const body = (await readJson(req, maxBodyBytes)) as ResponsesRequest;
-  const model = normalizeModel(body.model);
-  const prompt = messagesToPrompt(responsesToMessages(body));
-  const abort = new AbortController();
-  req.on("close", () => abort.abort());
+  const body = (await readJson(req, maxBodyBytes)) as ResponsesRequest
+  const model = normalizeModel(body.model)
+  const prompt = messagesToPrompt(responsesToMessages(body))
+  const abort = new AbortController()
+  req.on("close", () => abort.abort())
 
   if (body.stream === false) {
-    const result = await runner.run({ model, prompt, signal: abort.signal });
-    sendJson(res, 200, createResponseObject(result.model, result.text));
-    return;
+    const result = await runner.run({ model, prompt, signal: abort.signal })
+    sendJson(res, 200, createResponseObject(result.model, result.text))
+    return
   }
 
-  writeSseHeaders(res);
-  const stream = createResponseStream(model);
-  let lastModel = model;
-  let streamedText = "";
+  writeSseHeaders(res)
+  const stream = createResponseStream(model)
+  let lastModel = model
+  let streamedText = ""
   for (const [event, data] of stream.events) {
-    writeSseEvent(res, event, data);
+    writeSseEvent(res, event, data)
   }
   try {
     const result = await runner.run(
       { model, prompt, signal: abort.signal },
       {
         onDelta: (text) => {
-          streamedText += text;
-          const [event, data] = responseDeltaEvent(stream, text);
-          writeSseEvent(res, event, data);
+          streamedText += text
+          const [event, data] = responseDeltaEvent(stream, text)
+          writeSseEvent(res, event, data)
         },
         onModel: (nextModel) => {
-          lastModel = nextModel;
+          lastModel = nextModel
         },
       },
-    );
-    lastModel = result.model;
+    )
+    lastModel = result.model
     if (result.text !== streamedText) {
       const delta = result.text.startsWith(streamedText)
         ? result.text.slice(streamedText.length)
-        : result.text;
+        : result.text
       if (delta) {
-        streamedText += delta;
-        const [event, data] = responseDeltaEvent(stream, delta);
-        writeSseEvent(res, event, data);
+        streamedText += delta
+        const [event, data] = responseDeltaEvent(stream, delta)
+        writeSseEvent(res, event, data)
       }
     }
     for (const [event, data] of responseDoneEvents(
@@ -252,12 +252,12 @@ async function handleResponses(
       lastModel,
       result.text,
     )) {
-      writeSseEvent(res, event, data);
+      writeSseEvent(res, event, data)
     }
   } catch (error) {
-    writeSseError(res, error);
+    writeSseError(res, error)
   }
-  res.end();
+  res.end()
 }
 
 function readJson(
@@ -265,41 +265,41 @@ function readJson(
   maxBodyBytes = defaultMaxBodyBytes,
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    let body = "";
-    let bytes = 0;
-    let tooLarge = false;
-    req.setEncoding("utf8");
+    let body = ""
+    let bytes = 0
+    let tooLarge = false
+    req.setEncoding("utf8")
     req.on("data", (chunk) => {
-      if (tooLarge) return;
-      bytes += Buffer.byteLength(chunk);
+      if (tooLarge) return
+      bytes += Buffer.byteLength(chunk)
       if (bytes > maxBodyBytes) {
-        tooLarge = true;
+        tooLarge = true
         reject(
           new RequestError(
             413,
             "payload_too_large",
             `Request body exceeds ${maxBodyBytes} bytes`,
           ),
-        );
-        return;
+        )
+        return
       }
-      body += chunk;
-    });
+      body += chunk
+    })
     req.on("end", () => {
       try {
-        resolve(body ? JSON.parse(body) : {});
+        resolve(body ? JSON.parse(body) : {})
       } catch {
-        reject(new RequestError(400, "invalid_json", "Invalid JSON"));
+        reject(new RequestError(400, "invalid_json", "Invalid JSON"))
       }
-    });
-    req.on("error", reject);
-  });
+    })
+    req.on("error", reject)
+  })
 }
 
 function setCors(res: ServerResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
 function writeSseHeaders(res: ServerResponse) {
@@ -307,7 +307,7 @@ function writeSseHeaders(res: ServerResponse) {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-cache",
     connection: "keep-alive",
-  });
+  })
 }
 
 function writeSseEvent(
@@ -315,13 +315,13 @@ function writeSseEvent(
   event: string,
   data: Record<string, unknown>,
 ) {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify({ type: event, ...data })}\n\n`);
+  res.write(`event: ${event}\n`)
+  res.write(`data: ${JSON.stringify({ type: event, ...data })}\n\n`)
 }
 
 function writeSseError(res: ServerResponse, error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  res.write("event: error\n");
+  const message = error instanceof Error ? error.message : String(error)
+  res.write("event: error\n")
   res.write(
     `data: ${JSON.stringify({
       type: "error",
@@ -331,17 +331,17 @@ function writeSseError(res: ServerResponse, error: unknown) {
         code: "internal_error",
       },
     })}\n\n`,
-  );
+  )
 }
 
 function sendError(res: ServerResponse, error: unknown) {
   /* v8 ignore next 4 -- last-resort guard for unexpected errors after SSE headers. */
   if (res.headersSent) {
-    writeSseError(res, error);
-    res.end();
-    return;
+    writeSseError(res, error)
+    res.end()
+    return
   }
-  const status = error instanceof RequestError ? error.status : 500;
+  const status = error instanceof RequestError ? error.status : 500
   sendJson(res, status, {
     error: {
       message: error instanceof Error ? error.message : String(error),
@@ -351,16 +351,16 @@ function sendError(res: ServerResponse, error: unknown) {
           : "server_error",
       code: error instanceof RequestError ? error.code : "internal_error",
     },
-  });
+  })
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown) {
   /* v8 ignore next -- this is a last-resort guard for errors after SSE headers. */
-  if (res.headersSent) return;
-  const body = JSON.stringify(value);
+  if (res.headersSent) return
+  const body = JSON.stringify(value)
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
-  });
-  res.end(body);
+  })
+  res.end(body)
 }

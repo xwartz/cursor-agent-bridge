@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto"
 
 export function createChatResponse(model: string, text: string) {
   return {
@@ -14,7 +14,7 @@ export function createChatResponse(model: string, text: string) {
       },
     ],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-  };
+  }
 }
 
 export function createChatChunk(
@@ -35,7 +35,7 @@ export function createChatChunk(
         finish_reason: null,
       },
     ],
-  };
+  }
 }
 
 export function createChatDoneChunk(id: string, model: string) {
@@ -45,7 +45,7 @@ export function createChatDoneChunk(id: string, model: string) {
     created: Math.floor(Date.now() / 1000),
     model,
     choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-  };
+  }
 }
 
 export function createResponseObject(
@@ -55,22 +55,22 @@ export function createResponseObject(
   itemId = `msg_${randomUUID().replaceAll("-", "")}`,
 ) {
   const item: {
-    id: string;
-    type: "message";
-    status: "completed";
-    role: "assistant";
+    id: string
+    type: "message"
+    status: "completed"
+    role: "assistant"
     content: Array<{
-      type: "output_text";
-      text: string;
-      annotations: unknown[];
-    }>;
+      type: "output_text"
+      text: string
+      annotations: unknown[]
+    }>
   } = {
     id: itemId,
     type: "message",
     status: "completed",
     role: "assistant",
     content: [{ type: "output_text", text, annotations: [] }],
-  };
+  }
 
   return {
     id: responseId,
@@ -80,17 +80,17 @@ export function createResponseObject(
     model,
     output: [item],
     usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-  };
+  }
 }
 
 export function createResponseStream(model: string) {
-  const response = createResponseObject(model, "");
-  const item = response.output[0];
+  const response = createResponseObject(model, "")
+  const item = response.output[0]
   /* v8 ignore next -- createResponseObject always creates one output item. */
-  if (!item) throw new Error("Responses output item was not created");
-  const part = item.content[0];
+  if (!item) throw new Error("Responses output item was not created")
+  const part = item.content[0]
   /* v8 ignore next -- createResponseObject always creates one output text part. */
-  if (!part) throw new Error("Responses output text part was not created");
+  if (!part) throw new Error("Responses output text part was not created")
 
   return {
     response,
@@ -117,7 +117,7 @@ export function createResponseStream(model: string) {
         },
       ],
     ] as const,
-  };
+  }
 }
 
 export function responseDeltaEvent(
@@ -133,7 +133,7 @@ export function responseDeltaEvent(
       content_index: 0,
       delta,
     },
-  ] as const;
+  ] as const
 }
 
 export function responseDoneEvents(
@@ -146,13 +146,13 @@ export function responseDoneEvents(
     text,
     stream.response.id,
     stream.item.id,
-  );
-  const item = response.output[0];
+  )
+  const item = response.output[0]
   /* v8 ignore next -- createResponseObject always creates one output item. */
-  if (!item) throw new Error("Responses output item was not created");
-  const part = item.content[0];
+  if (!item) throw new Error("Responses output item was not created")
+  const part = item.content[0]
   /* v8 ignore next -- createResponseObject always creates one output text part. */
-  if (!part) throw new Error("Responses output text part was not created");
+  if (!part) throw new Error("Responses output text part was not created")
 
   return [
     [
@@ -180,14 +180,14 @@ export function responseDoneEvents(
       { response_id: response.id, output_index: 0, item },
     ],
     ["response.completed", { response }],
-  ] as const;
+  ] as const
 }
 
 export function responseTextEvents(model: string, text: string) {
-  const stream = createResponseStream(model);
+  const stream = createResponseStream(model)
   return [
     ...stream.events,
     responseDeltaEvent(stream, text),
     ...responseDoneEvents(stream, model, text),
-  ] as const;
+  ] as const
 }

@@ -48,10 +48,6 @@ HTTP endpoints for Codex custom providers and OpenAI-style clients.
 - Run coverage: `pnpm test:coverage`
 - Build: `pnpm build`
 - Check package contents: `npm pack --dry-run`
-- Install the optional macOS service:
-  `cursor-agent-bridge launch-agent install`
-- Inspect the optional macOS service:
-  `cursor-agent-bridge launch-agent status`
 
 Use a Node version accepted by `pnpm@11.9.0`; Node `22.12.0` is too old for that
 pnpm release.

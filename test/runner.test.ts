@@ -1,23 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { CursorRunner } from "../src/cursor/runner.js";
-import { createFakeAgent } from "./helpers.js";
+import { describe, expect, it } from "vitest"
+import { CursorRunner } from "../src/cursor/runner.js"
+import { createFakeAgent } from "./helpers.js"
 
 describe("CursorRunner", () => {
   it("uses environment and process defaults", () => {
-    const previous = process.env.CURSOR_AGENT_PATH;
-    process.env.CURSOR_AGENT_PATH = "env-agent";
-    const runner = new CursorRunner();
+    const previous = process.env.CURSOR_AGENT_PATH
+    process.env.CURSOR_AGENT_PATH = "env-agent"
+    const runner = new CursorRunner()
 
-    expect(runner.agentPath).toBe("env-agent");
-    expect(runner.defaultCwd).toBe(process.cwd());
-    expect(runner.timeoutMs).toBe(300_000);
+    expect(runner.agentPath).toBe("env-agent")
+    expect(runner.defaultCwd).toBe(process.cwd())
+    expect(runner.timeoutMs).toBe(300_000)
 
     if (previous === undefined) {
-      delete process.env.CURSOR_AGENT_PATH;
+      delete process.env.CURSOR_AGENT_PATH
     } else {
-      process.env.CURSOR_AGENT_PATH = previous;
+      process.env.CURSOR_AGENT_PATH = previous
     }
-  });
+  })
 
   it("lists models through Cursor Agent", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -25,15 +25,15 @@ if (process.argv.includes("--list-models")) {
   console.log("Available models\\n\\nauto - Auto\\ncomposer-2.5-fast - Composer 2.5 Fast");
   process.exit(0);
 }
-`);
+`)
 
     await expect(new CursorRunner({ agentPath }).listModels()).resolves.toEqual(
       [
         { id: "auto", name: "Auto" },
         { id: "composer-2.5-fast", name: "Composer 2.5 Fast" },
       ],
-    );
-  });
+    )
+  })
 
   it("caches listed models within the configured TTL", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -43,39 +43,39 @@ if (!countPath) process.exit(1);
 const count = Number(readFileSync(countPath, "utf8")) + 1;
 writeFileSync(countPath, String(count));
 console.log("auto - Auto");
-`);
-    const { mkdtemp, readFile, writeFile } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-cache-"));
-    const countPath = join(dir, "count.txt");
-    await writeFile(countPath, "0");
-    const previous = process.env.COUNT_PATH;
-    process.env.COUNT_PATH = countPath;
-    const runner = new CursorRunner({ agentPath, modelListCacheMs: 60_000 });
+`)
+    const { mkdtemp, readFile, writeFile } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-cache-"))
+    const countPath = join(dir, "count.txt")
+    await writeFile(countPath, "0")
+    const previous = process.env.COUNT_PATH
+    process.env.COUNT_PATH = countPath
+    const runner = new CursorRunner({ agentPath, modelListCacheMs: 60_000 })
 
-    await runner.listModels();
-    await runner.listModels();
+    await runner.listModels()
+    await runner.listModels()
 
-    expect(await readFile(countPath, "utf8")).toBe("1");
-    await runner.listModels({ refresh: true });
-    expect(await readFile(countPath, "utf8")).toBe("2");
+    expect(await readFile(countPath, "utf8")).toBe("1")
+    await runner.listModels({ refresh: true })
+    expect(await readFile(countPath, "utf8")).toBe("2")
     if (previous === undefined) {
-      delete process.env.COUNT_PATH;
+      delete process.env.COUNT_PATH
     } else {
-      process.env.COUNT_PATH = previous;
+      process.env.COUNT_PATH = previous
     }
-  });
+  })
 
   it("rejects when model listing fails", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
 process.exit(9);
-`);
+`)
 
     await expect(
       new CursorRunner({ agentPath }).listModels(),
-    ).rejects.toBeTruthy();
-  });
+    ).rejects.toBeTruthy()
+  })
 
   it("runs prompts and emits deltas", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -86,17 +86,17 @@ process.stdin.on("end", () => {
   console.log(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "OK" }] } }));
   console.log(JSON.stringify({ type: "result", result: "OK" }));
 });
-`);
-    const deltas: string[] = [];
+`)
+    const deltas: string[] = []
 
     const result = await new CursorRunner({ agentPath }).run(
       { model: "auto", prompt: "hi" },
       { onDelta: (text) => deltas.push(text) },
-    );
+    )
 
-    expect(result).toEqual({ model: "composer-2.5-fast", text: "OK" });
-    expect(deltas).toEqual(["O", "K"]);
-  });
+    expect(result).toEqual({ model: "composer-2.5-fast", text: "OK" })
+    expect(deltas).toEqual(["O", "K"])
+  })
 
   it("can run without Cursor Agent yolo mode", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -108,59 +108,59 @@ process.stdin.resume();
 process.stdin.on("end", () => {
   console.log(JSON.stringify({ type: "result", result: "OK" }));
 });
-`);
+`)
 
     await expect(
       new CursorRunner({ agentPath, yolo: false }).run({
         model: "auto",
         prompt: "hi",
       }),
-    ).resolves.toEqual({ model: "auto", text: "OK" });
-  });
+    ).resolves.toEqual({ model: "auto", text: "OK" })
+  })
 
   it("limits concurrent runs", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
 setTimeout(() => {
   console.log(JSON.stringify({ type: "result", result: "OK" }));
 }, 50);
-`);
-    const runner = new CursorRunner({ agentPath, maxConcurrentRuns: 1 });
-    const startedAt = Date.now();
+`)
+    const runner = new CursorRunner({ agentPath, maxConcurrentRuns: 1 })
+    const startedAt = Date.now()
 
     await Promise.all([
       runner.run({ model: "auto", prompt: "one" }),
       runner.run({ model: "auto", prompt: "two" }),
-    ]);
+    ])
 
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(90);
-  });
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(90)
+  })
 
   it("falls back to one concurrent run for invalid environment values", () => {
-    const previous = process.env.CURSOR_AGENT_MAX_CONCURRENT;
-    process.env.CURSOR_AGENT_MAX_CONCURRENT = "not-a-number";
+    const previous = process.env.CURSOR_AGENT_MAX_CONCURRENT
+    process.env.CURSOR_AGENT_MAX_CONCURRENT = "not-a-number"
 
     try {
-      const runner = new CursorRunner();
+      const runner = new CursorRunner()
 
-      expect(runner.maxConcurrentRuns).toBe(1);
+      expect(runner.maxConcurrentRuns).toBe(1)
     } finally {
       if (previous === undefined) {
-        delete process.env.CURSOR_AGENT_MAX_CONCURRENT;
+        delete process.env.CURSOR_AGENT_MAX_CONCURRENT
       } else {
-        process.env.CURSOR_AGENT_MAX_CONCURRENT = previous;
+        process.env.CURSOR_AGENT_MAX_CONCURRENT = previous
       }
     }
-  });
+  })
 
   it("rejects pre-aborted and queued-aborted requests", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
 setTimeout(() => {
   console.log(JSON.stringify({ type: "result", result: "OK" }));
 }, 100);
-`);
-    const runner = new CursorRunner({ agentPath, maxConcurrentRuns: 1 });
-    const preAborted = new AbortController();
-    preAborted.abort();
+`)
+    const runner = new CursorRunner({ agentPath, maxConcurrentRuns: 1 })
+    const preAborted = new AbortController()
+    preAborted.abort()
 
     await expect(
       runner.run({
@@ -168,20 +168,20 @@ setTimeout(() => {
         prompt: "pre",
         signal: preAborted.signal,
       }),
-    ).rejects.toThrow("Request aborted");
+    ).rejects.toThrow("Request aborted")
 
-    const first = runner.run({ model: "auto", prompt: "first" });
-    const queuedAbort = new AbortController();
+    const first = runner.run({ model: "auto", prompt: "first" })
+    const queuedAbort = new AbortController()
     const second = runner.run({
       model: "auto",
       prompt: "second",
       signal: queuedAbort.signal,
-    });
-    queuedAbort.abort();
+    })
+    queuedAbort.abort()
 
-    await expect(second).rejects.toThrow("Request aborted");
-    await expect(first).resolves.toEqual({ model: "auto", text: "OK" });
-  });
+    await expect(second).rejects.toThrow("Request aborted")
+    await expect(first).resolves.toEqual({ model: "auto", text: "OK" })
+  })
 
   it("passes explicit models and reports stderr failures", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -189,12 +189,12 @@ if (process.argv.includes("--model") && process.argv.includes("bad-model")) {
   console.error("bad model");
   process.exit(2);
 }
-`);
+`)
 
     await expect(
       new CursorRunner({ agentPath }).run({ model: "bad-model", prompt: "hi" }),
-    ).rejects.toThrow("bad model");
-  });
+    ).rejects.toThrow("bad model")
+  })
 
   it("uses assistant text when no result event is emitted", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -207,15 +207,15 @@ process.stdin.on("end", () => {
   console.log(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "OK" }] } }));
   console.log(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "NO" }] } }));
 });
-`);
+`)
 
     await expect(
       new CursorRunner({ agentPath }).run({ model: "auto", prompt: "hi" }),
     ).resolves.toEqual({
       model: "auto",
       text: "NO",
-    });
-  });
+    })
+  })
 
   it("rejects process spawn failures", async () => {
     await expect(
@@ -223,21 +223,21 @@ process.stdin.on("end", () => {
         model: "auto",
         prompt: "hi",
       }),
-    ).rejects.toThrow();
-  });
+    ).rejects.toThrow()
+  })
 
   it("times out long running requests", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
 setTimeout(() => {}, 10000);
-`);
+`)
 
     await expect(
       new CursorRunner({ agentPath, timeoutMs: 5 }).run({
         model: "auto",
         prompt: "hi",
       }),
-    ).rejects.toThrow("timed out");
-  });
+    ).rejects.toThrow("timed out")
+  })
 
   it("force-kills processes that ignore termination after timeout", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
@@ -247,63 +247,63 @@ if (!pidPath) process.exit(1);
 writeFileSync(pidPath, String(process.pid));
 process.on("SIGTERM", () => {});
 setTimeout(() => {}, 10000);
-`);
-    const { mkdtemp, readFile } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-kill-"));
-    const pidPath = join(dir, "pid.txt");
-    const previous = process.env.PID_PATH;
-    process.env.PID_PATH = pidPath;
+`)
+    const { mkdtemp, readFile } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const dir = await mkdtemp(join(tmpdir(), "cursor-agent-kill-"))
+    const pidPath = join(dir, "pid.txt")
+    const previous = process.env.PID_PATH
+    process.env.PID_PATH = pidPath
 
     try {
       const promise = new CursorRunner({ agentPath, timeoutMs: 5_000 }).run({
         model: "auto",
         prompt: "hi",
-      });
-      promise.catch(() => {});
+      })
+      promise.catch(() => {})
 
-      await waitForFile(pidPath);
-      await expect(promise).rejects.toThrow("timed out");
-      const pid = Number(await readFile(pidPath, "utf8"));
-      await new Promise((resolve) => setTimeout(resolve, 1_200));
-      expect(() => process.kill(pid, 0)).toThrow();
+      await waitForFile(pidPath)
+      await expect(promise).rejects.toThrow("timed out")
+      const pid = Number(await readFile(pidPath, "utf8"))
+      await new Promise((resolve) => setTimeout(resolve, 1_200))
+      expect(() => process.kill(pid, 0)).toThrow()
     } finally {
       if (previous === undefined) {
-        delete process.env.PID_PATH;
+        delete process.env.PID_PATH
       } else {
-        process.env.PID_PATH = previous;
+        process.env.PID_PATH = previous
       }
     }
-  }, 15_000);
+  }, 15_000)
 
   it("aborts running requests", async () => {
     const agentPath = await createFakeAgent(`#!/usr/bin/env node
 setTimeout(() => {}, 10000);
-`);
-    const abort = new AbortController();
+`)
+    const abort = new AbortController()
     const promise = new CursorRunner({ agentPath }).run({
       model: "auto",
       prompt: "hi",
       signal: abort.signal,
-    });
+    })
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    abort.abort();
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    abort.abort()
 
-    await expect(promise).rejects.toThrow("Request aborted");
-  });
-});
+    await expect(promise).rejects.toThrow("Request aborted")
+  })
+})
 
 async function waitForFile(path: string) {
-  const { access } = await import("node:fs/promises");
+  const { access } = await import("node:fs/promises")
   for (let attempt = 0; attempt < 500; attempt += 1) {
     try {
-      await access(path);
-      return;
+      await access(path)
+      return
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10))
     }
   }
-  throw new Error(`Timed out waiting for ${path}`);
+  throw new Error(`Timed out waiting for ${path}`)
 }

@@ -1,18 +1,18 @@
-import type { BridgeModel } from "../types.js";
+import type { BridgeModel } from "../types.js"
 
 export function parseAgentModelList(output: string): BridgeModel[] {
   return output
     .split("\n")
     .map((line) => line.trim())
     .map((line) => {
-      const match = line.match(/^([a-zA-Z0-9_.-]+)\s+-\s+(.+)$/);
-      return match ? { id: match[1] ?? "", name: match[2] ?? "" } : null;
+      const match = line.match(/^([a-zA-Z0-9_.-]+)\s+-\s+(.+)$/)
+      return match ? { id: match[1] ?? "", name: match[2] ?? "" } : null
     })
-    .filter((model): model is BridgeModel => Boolean(model?.id && model.name));
+    .filter((model): model is BridgeModel => Boolean(model?.id && model.name))
 }
 
 export function toOpenAIModelList(models: BridgeModel[]) {
-  const created = Math.floor(Date.now() / 1000);
+  const created = Math.floor(Date.now() / 1000)
   return {
     object: "list",
     data: models.map((model) => ({
@@ -21,7 +21,7 @@ export function toOpenAIModelList(models: BridgeModel[]) {
       owned_by: "cursor",
       created,
     })),
-  };
+  }
 }
 
 export function toCodexModelCatalog(models: BridgeModel[]) {
@@ -61,5 +61,5 @@ export function toCodexModelCatalog(models: BridgeModel[]) {
       supports_search_tool: false,
       use_responses_lite: false,
     })),
-  };
+  }
 }
