@@ -4,6 +4,9 @@ import {
   createChatDoneChunk,
   createChatResponse,
   createResponseObject,
+  createResponseStream,
+  responseDeltaEvent,
+  responseDoneEvents,
   responseTextEvents,
 } from "../src/adapter/openai.js";
 
@@ -41,8 +44,24 @@ describe("OpenAI protocol adapters", () => {
 
   it("emits completion events for Codex SSE", () => {
     const events = responseTextEvents("auto", "OK");
+    const created = events[0]?.[1] as { id: string };
+    const completed = events.at(-1)?.[1] as { response: { id: string } };
 
     expect(events.map(([event]) => event)).toContain("response.completed");
-    expect(events[0]?.[1]).toHaveProperty("status", "in_progress");
+    expect(created).toHaveProperty("status", "in_progress");
+    expect(created.id).toBe(completed.response.id);
+  });
+
+  it("creates incremental Responses API stream events with stable ids", () => {
+    const stream = createResponseStream("auto");
+    const [, delta] = responseDeltaEvent(stream, "O");
+    const doneEvents = responseDoneEvents(stream, "composer", "OK");
+    const completed = doneEvents.at(-1)?.[1] as {
+      response: { id: string; model: string };
+    };
+
+    expect(delta.response_id).toBe(stream.response.id);
+    expect(completed.response.id).toBe(stream.response.id);
+    expect(completed.response.model).toBe("composer");
   });
 });

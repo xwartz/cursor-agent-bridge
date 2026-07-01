@@ -12,7 +12,9 @@ import {
   createChatDoneChunk,
   createChatResponse,
   createResponseObject,
-  responseTextEvents,
+  createResponseStream,
+  responseDeltaEvent,
+  responseDoneEvents,
 } from "./adapter/openai.js";
 import { CursorRunner } from "./cursor/runner.js";
 import type {
@@ -22,6 +24,18 @@ import type {
 } from "./types.js";
 
 const packageVersion = packageJson.version;
+const defaultMaxBodyBytes = 1024 * 1024;
+
+class RequestError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
 
 export async function startServer(config: ServerConfig = {}) {
   const port = config.port ?? Number(process.env.PORT || 4646);
@@ -30,20 +44,16 @@ export async function startServer(config: ServerConfig = {}) {
     ...(config.agentPath ? { agentPath: config.agentPath } : {}),
     ...(config.defaultCwd ? { defaultCwd: config.defaultCwd } : {}),
   });
+  const maxBodyBytes = config.maxBodyBytes ?? defaultMaxBodyBytes;
 
   const server = http.createServer(async (req, res) => {
     try {
-      await route(req, res, runner);
+      await route(req, res, runner, maxBodyBytes);
     } catch (error) {
-      sendJson(res, 500, {
-        error: {
-          message: error instanceof Error ? error.message : String(error),
-          type: "server_error",
-          code: "internal_error",
-        },
-      });
+      sendError(res, error);
     }
   });
+  server.on("close", () => runner.abortAll());
 
   await new Promise<void>((resolve, reject) => {
     server.listen(port, host, resolve);
@@ -57,6 +67,7 @@ async function route(
   req: IncomingMessage,
   res: ServerResponse,
   runner: CursorRunner,
+  maxBodyBytes: number,
 ) {
   setCors(res);
   const url = new URL(
@@ -80,7 +91,9 @@ async function route(
   }
 
   if (req.method === "GET" && url.pathname === "/v1/models") {
-    const models = await runner.listModels();
+    const models = await runner.listModels({
+      refresh: url.searchParams.get("refresh") === "1",
+    });
     const wantsCodexCatalog =
       url.searchParams.has("client_version") ||
       url.searchParams.get("format") === "codex";
@@ -95,12 +108,12 @@ async function route(
   }
 
   if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
-    await handleChat(req, res, runner);
+    await handleChat(req, res, runner, maxBodyBytes);
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/v1/responses") {
-    await handleResponses(req, res, runner);
+    await handleResponses(req, res, runner, maxBodyBytes);
     return;
   }
 
@@ -117,8 +130,9 @@ async function handleChat(
   req: IncomingMessage,
   res: ServerResponse,
   runner: CursorRunner,
+  maxBodyBytes: number,
 ) {
-  const body = (await readJson(req)) as ChatCompletionRequest;
+  const body = (await readJson(req, maxBodyBytes)) as ChatCompletionRequest;
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     sendJson(res, 400, {
       error: {
@@ -140,24 +154,41 @@ async function handleChat(
     writeSseHeaders(res);
     let isFirst = true;
     let lastModel = model;
-    await runner.run(
-      { model, prompt, signal: abort.signal },
-      {
-        onDelta: (text) => {
+    let streamedText = "";
+    try {
+      const result = await runner.run(
+        { model, prompt, signal: abort.signal },
+        {
+          onDelta: (text) => {
+            streamedText += text;
+            res.write(
+              `data: ${JSON.stringify(createChatChunk(id, lastModel, text, isFirst))}\n\n`,
+            );
+            isFirst = false;
+          },
+          onModel: (nextModel) => {
+            lastModel = nextModel;
+          },
+        },
+      );
+      lastModel = result.model;
+      if (result.text !== streamedText) {
+        const delta = result.text.startsWith(streamedText)
+          ? result.text.slice(streamedText.length)
+          : result.text;
+        if (delta) {
           res.write(
-            `data: ${JSON.stringify(createChatChunk(id, lastModel, text, isFirst))}\n\n`,
+            `data: ${JSON.stringify(createChatChunk(id, lastModel, delta, isFirst))}\n\n`,
           );
-          isFirst = false;
-        },
-        onModel: (nextModel) => {
-          lastModel = nextModel;
-        },
-      },
-    );
-    res.write(
-      `data: ${JSON.stringify(createChatDoneChunk(id, lastModel))}\n\n`,
-    );
-    res.write("data: [DONE]\n\n");
+        }
+      }
+      res.write(
+        `data: ${JSON.stringify(createChatDoneChunk(id, lastModel))}\n\n`,
+      );
+      res.write("data: [DONE]\n\n");
+    } catch (error) {
+      writeSseError(res, error);
+    }
     res.end();
     return;
   }
@@ -170,40 +201,95 @@ async function handleResponses(
   req: IncomingMessage,
   res: ServerResponse,
   runner: CursorRunner,
+  maxBodyBytes: number,
 ) {
-  const body = (await readJson(req)) as ResponsesRequest;
+  const body = (await readJson(req, maxBodyBytes)) as ResponsesRequest;
   const model = normalizeModel(body.model);
   const prompt = messagesToPrompt(responsesToMessages(body));
   const abort = new AbortController();
   req.on("close", () => abort.abort());
 
-  const result = await runner.run({ model, prompt, signal: abort.signal });
-
   if (body.stream === false) {
+    const result = await runner.run({ model, prompt, signal: abort.signal });
     sendJson(res, 200, createResponseObject(result.model, result.text));
     return;
   }
 
   writeSseHeaders(res);
-  for (const [event, data] of responseTextEvents(result.model, result.text)) {
-    res.write(`event: ${event}\n`);
-    res.write(`data: ${JSON.stringify({ type: event, ...data })}\n\n`);
+  const stream = createResponseStream(model);
+  let lastModel = model;
+  let streamedText = "";
+  for (const [event, data] of stream.events) {
+    writeSseEvent(res, event, data);
+  }
+  try {
+    const result = await runner.run(
+      { model, prompt, signal: abort.signal },
+      {
+        onDelta: (text) => {
+          streamedText += text;
+          const [event, data] = responseDeltaEvent(stream, text);
+          writeSseEvent(res, event, data);
+        },
+        onModel: (nextModel) => {
+          lastModel = nextModel;
+        },
+      },
+    );
+    lastModel = result.model;
+    if (result.text !== streamedText) {
+      const delta = result.text.startsWith(streamedText)
+        ? result.text.slice(streamedText.length)
+        : result.text;
+      if (delta) {
+        streamedText += delta;
+        const [event, data] = responseDeltaEvent(stream, delta);
+        writeSseEvent(res, event, data);
+      }
+    }
+    for (const [event, data] of responseDoneEvents(
+      stream,
+      lastModel,
+      result.text,
+    )) {
+      writeSseEvent(res, event, data);
+    }
+  } catch (error) {
+    writeSseError(res, error);
   }
   res.end();
 }
 
-function readJson(req: IncomingMessage): Promise<unknown> {
+function readJson(
+  req: IncomingMessage,
+  maxBodyBytes = defaultMaxBodyBytes,
+): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let body = "";
+    let bytes = 0;
+    let tooLarge = false;
     req.setEncoding("utf8");
     req.on("data", (chunk) => {
+      if (tooLarge) return;
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > maxBodyBytes) {
+        tooLarge = true;
+        reject(
+          new RequestError(
+            413,
+            "payload_too_large",
+            `Request body exceeds ${maxBodyBytes} bytes`,
+          ),
+        );
+        return;
+      }
       body += chunk;
     });
     req.on("end", () => {
       try {
         resolve(body ? JSON.parse(body) : {});
-      } catch (error) {
-        reject(error);
+      } catch {
+        reject(new RequestError(400, "invalid_json", "Invalid JSON"));
       }
     });
     req.on("error", reject);
@@ -221,6 +307,50 @@ function writeSseHeaders(res: ServerResponse) {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-cache",
     connection: "keep-alive",
+  });
+}
+
+function writeSseEvent(
+  res: ServerResponse,
+  event: string,
+  data: Record<string, unknown>,
+) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify({ type: event, ...data })}\n\n`);
+}
+
+function writeSseError(res: ServerResponse, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  res.write("event: error\n");
+  res.write(
+    `data: ${JSON.stringify({
+      type: "error",
+      error: {
+        message,
+        type: "server_error",
+        code: "internal_error",
+      },
+    })}\n\n`,
+  );
+}
+
+function sendError(res: ServerResponse, error: unknown) {
+  /* v8 ignore next 4 -- last-resort guard for unexpected errors after SSE headers. */
+  if (res.headersSent) {
+    writeSseError(res, error);
+    res.end();
+    return;
+  }
+  const status = error instanceof RequestError ? error.status : 500;
+  sendJson(res, status, {
+    error: {
+      message: error instanceof Error ? error.message : String(error),
+      type:
+        error instanceof RequestError
+          ? "invalid_request_error"
+          : "server_error",
+      code: error instanceof RequestError ? error.code : "internal_error",
+    },
   });
 }
 

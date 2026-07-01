@@ -27,32 +27,12 @@ HTTP endpoints for Codex custom providers and OpenAI-style clients.
 ## Don't
 
 - Do not forward client `Authorization` headers to Cursor Agent by default.
-  Cursor auth comes from local `agent login` state or process-level
-  `CURSOR_API_KEY`.
+  Cursor auth comes from local `agent login` state.
 - Do not add hardcoded Cursor model allowlists.
 - Do not make LaunchAgent installation part of the normal CLI or library path.
-- Do not add `NPM_TOKEN` to publishing. This project uses npm Trusted
-  Publishing with GitHub OIDC.
 - Do not edit `pnpm-lock.yaml` with whatever `pnpm` appears first on `PATH`.
 - Do not copy README material here unless it changes how an agent should edit,
   test, or release the project.
-
-## Project Map
-
-- `src/cli.ts`: CLI entrypoint, command parsing, `serve`, and `launch-agent`
-  subcommands.
-- `src/server.ts`: HTTP server, CORS, `/health`, `/v1/models`,
-  `/v1/responses`, and `/v1/chat/completions`.
-- `src/launch-agent.ts`: macOS LaunchAgent plist generation and
-  install/status/uninstall helpers.
-- `src/adapter/messages.ts`: message normalization and prompt construction.
-- `src/adapter/models.ts`: Cursor model parsing and OpenAI/Codex catalog
-  conversion.
-- `src/adapter/openai.ts`: OpenAI-compatible response and streaming payload
-  builders.
-- `src/cursor/runner.ts`: Cursor Agent subprocess execution and output parsing.
-- `test/*.test.ts`: Vitest coverage for adapters, server behavior, runner
-  behavior, package metadata, and LaunchAgent helpers.
 
 ## Commands
 

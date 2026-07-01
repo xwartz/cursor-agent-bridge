@@ -58,4 +58,5 @@ export interface ServerConfig {
   host?: string;
   agentPath?: string;
   defaultCwd?: string;
+  maxBodyBytes?: number;
 }

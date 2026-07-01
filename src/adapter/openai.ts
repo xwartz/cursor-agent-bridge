@@ -52,8 +52,8 @@ export function createResponseObject(
   model: string,
   text: string,
   responseId = `resp_${randomUUID().replaceAll("-", "")}`,
+  itemId = `msg_${randomUUID().replaceAll("-", "")}`,
 ) {
-  const itemId = `msg_${randomUUID().replaceAll("-", "")}`;
   const item: {
     id: string;
     type: "message";
@@ -83,8 +83,70 @@ export function createResponseObject(
   };
 }
 
-export function responseTextEvents(model: string, text: string) {
-  const response = createResponseObject(model, text);
+export function createResponseStream(model: string) {
+  const response = createResponseObject(model, "");
+  const item = response.output[0];
+  /* v8 ignore next -- createResponseObject always creates one output item. */
+  if (!item) throw new Error("Responses output item was not created");
+  const part = item.content[0];
+  /* v8 ignore next -- createResponseObject always creates one output text part. */
+  if (!part) throw new Error("Responses output text part was not created");
+
+  return {
+    response,
+    item,
+    part,
+    events: [
+      ["response.created", { ...response, status: "in_progress", output: [] }],
+      [
+        "response.output_item.added",
+        {
+          response_id: response.id,
+          output_index: 0,
+          item: { ...item, status: "in_progress", content: [] },
+        },
+      ],
+      [
+        "response.content_part.added",
+        {
+          response_id: response.id,
+          item_id: item.id,
+          output_index: 0,
+          content_index: 0,
+          part: { ...part, text: "" },
+        },
+      ],
+    ] as const,
+  };
+}
+
+export function responseDeltaEvent(
+  stream: ReturnType<typeof createResponseStream>,
+  delta: string,
+) {
+  return [
+    "response.output_text.delta",
+    {
+      response_id: stream.response.id,
+      item_id: stream.item.id,
+      output_index: 0,
+      content_index: 0,
+      delta,
+    },
+  ] as const;
+}
+
+export function responseDoneEvents(
+  stream: ReturnType<typeof createResponseStream>,
+  model: string,
+  text: string,
+) {
+  const response = createResponseObject(
+    model,
+    text,
+    stream.response.id,
+    stream.item.id,
+  );
   const item = response.output[0];
   /* v8 ignore next -- createResponseObject always creates one output item. */
   if (!item) throw new Error("Responses output item was not created");
@@ -93,35 +155,6 @@ export function responseTextEvents(model: string, text: string) {
   if (!part) throw new Error("Responses output text part was not created");
 
   return [
-    ["response.created", { ...response, status: "in_progress", output: [] }],
-    [
-      "response.output_item.added",
-      {
-        response_id: response.id,
-        output_index: 0,
-        item: { ...item, status: "in_progress", content: [] },
-      },
-    ],
-    [
-      "response.content_part.added",
-      {
-        response_id: response.id,
-        item_id: item.id,
-        output_index: 0,
-        content_index: 0,
-        part: { ...part, text: "" },
-      },
-    ],
-    [
-      "response.output_text.delta",
-      {
-        response_id: response.id,
-        item_id: item.id,
-        output_index: 0,
-        content_index: 0,
-        delta: text,
-      },
-    ],
     [
       "response.output_text.done",
       {
@@ -147,5 +180,14 @@ export function responseTextEvents(model: string, text: string) {
       { response_id: response.id, output_index: 0, item },
     ],
     ["response.completed", { response }],
+  ] as const;
+}
+
+export function responseTextEvents(model: string, text: string) {
+  const stream = createResponseStream(model);
+  return [
+    ...stream.events,
+    responseDeltaEvent(stream, text),
+    ...responseDoneEvents(stream, model, text),
   ] as const;
 }

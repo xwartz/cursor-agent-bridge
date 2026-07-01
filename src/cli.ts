@@ -1,15 +1,30 @@
 #!/usr/bin/env node
 
+import packageJson from "../package.json" with { type: "json" };
 import {
   installLaunchAgent,
   printLaunchAgentStatus,
   uninstallLaunchAgent,
 } from "./launch-agent.js";
 import { startServer } from "./server.js";
+import { runUpgrade } from "./upgrade.js";
 
 function readArg(name: string, fallback: string | undefined) {
   const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : fallback;
+  if (index < 0) return fallback;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("-"))
+    throw new Error(`Missing value for ${name}`);
+  return value;
+}
+
+function parsePort(value: string | undefined, fallback: number) {
+  if (value === undefined) return fallback;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`Invalid port: ${value}`);
+  }
+  return port;
 }
 
 const command =
@@ -29,6 +44,7 @@ Usage:
   cursor-agent-bridge launch-agent install [--host 127.0.0.1] [--port 4646] [--agent-path agent]
   cursor-agent-bridge launch-agent uninstall
   cursor-agent-bridge launch-agent status
+  cursor-agent-bridge upgrade [--check] [--target latest] [--manager auto|npm|pnpm]
 
 Environment:
   HOST                Listen host, default 127.0.0.1
@@ -38,12 +54,36 @@ Environment:
   process.exit(0);
 }
 
+if (command === "version" || process.argv.includes("--version")) {
+  console.log(packageJson.version);
+  process.exit(0);
+}
+
+if (command === "upgrade") {
+  const checkOnly = process.argv.includes("--check");
+  const target = readArg("--target", "latest") ?? "latest";
+  const manager = readArg("--manager", "auto") ?? "auto";
+
+  if (manager !== "auto" && manager !== "npm" && manager !== "pnpm") {
+    console.error("Invalid --manager value. Use auto, npm, or pnpm.");
+    process.exit(1);
+  }
+
+  const exitCode = await runUpgrade({
+    currentVersion: packageJson.version,
+    checkOnly,
+    target,
+    manager,
+  });
+  process.exit(exitCode);
+}
+
 if (command === "launch-agent") {
   const action = process.argv[3] ?? "status";
   try {
     if (action === "install") {
       const host = readArg("--host", process.env.HOST) ?? "127.0.0.1";
-      const port = Number(readArg("--port", process.env.PORT) ?? 4646);
+      const port = parsePort(readArg("--port", process.env.PORT), 4646);
       const agentPath = readArg("--agent-path", process.env.CURSOR_AGENT_PATH);
       const paths = installLaunchAgent({
         cliPath: process.argv[1] ?? "cursor-agent-bridge",
@@ -80,8 +120,15 @@ if (command !== "serve") {
   process.exit(1);
 }
 
-const host = readArg("--host", process.env.HOST) ?? "127.0.0.1";
-const port = Number(readArg("--port", process.env.PORT) ?? 4646);
+let host: string;
+let port: number;
+try {
+  host = readArg("--host", process.env.HOST) ?? "127.0.0.1";
+  port = parsePort(readArg("--port", process.env.PORT), 4646);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 const server = await startServer({
   host,
