@@ -51,6 +51,9 @@ Usage:
   cursor-agent-bridge launch-agent status
   cursor-agent-bridge upgrade [--check] [--target latest] [--manager auto|npm|pnpm]
 
+Alias:
+  cab is the short alias for cursor-agent-bridge
+
 Environment:
   HOST                Listen host, default 127.0.0.1
   PORT                Listen port, default 4646

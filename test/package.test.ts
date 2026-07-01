@@ -13,4 +13,15 @@ describe("package metadata", () => {
       url: "https://github.com/xwartz/cursor-agent-bridge",
     })
   })
+
+  it("publishes the long CLI command and short alias", async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(process.cwd(), "package.json"), "utf8"),
+    )
+
+    expect(packageJson.bin).toEqual({
+      "cursor-agent-bridge": "./dist/cli.mjs",
+      cab: "./dist/cli.mjs",
+    })
+  })
 })

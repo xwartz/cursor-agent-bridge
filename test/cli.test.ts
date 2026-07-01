@@ -41,6 +41,9 @@ describe("CLI", () => {
     expect(result.stdout).toContain("cursor-agent-bridge config write")
     expect(result.stdout).toContain("cursor-agent-bridge config switch")
     expect(result.stdout).toContain("cursor-agent-bridge models")
+    expect(result.stdout).toContain(
+      "cab is the short alias for cursor-agent-bridge",
+    )
   })
 
   it("prints the package version with exit code 0", async () => {

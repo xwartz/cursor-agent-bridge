@@ -2,9 +2,9 @@
 
 OpenAI-compatible HTTP bridge for the Cursor Agent CLI.
 
-`cursor-agent-bridge` lets Codex and other OpenAI-compatible clients talk to a
-local Cursor Agent session at `http://127.0.0.1:4646/v1`. It supports the
-Responses API used by Codex custom providers, plus Chat Completions for simpler
+Use it when you want Codex or another OpenAI-style client to call your local
+Cursor Agent CLI through `http://127.0.0.1:4646/v1`. The bridge supports the
+Responses API that Codex custom providers use, plus Chat Completions for simpler
 clients.
 
 ## Requirements
@@ -23,12 +23,19 @@ agent --list-models
 
 ## Install
 
-Install the package globally, then confirm the installed command is on your
-`PATH`:
+Install the package globally, then confirm the CLI is on your `PATH`:
 
 ```bash
 pnpm add -g cursor-agent-bridge
-cursor-agent-bridge --version
+cab --version
+```
+
+The package installs two commands. `cab` is the short alias; the full
+`cursor-agent-bridge` command stays available for scripts and existing setups.
+
+```bash
+cab serve
+cab config switch cursor
 ```
 
 For local development:
@@ -36,7 +43,7 @@ For local development:
 ```bash
 pnpm install
 pnpm build
-pnpm exec cursor-agent-bridge serve
+node dist/cli.mjs serve
 ```
 
 ## Upgrade
@@ -44,20 +51,20 @@ pnpm exec cursor-agent-bridge serve
 Check for updates:
 
 ```bash
-cursor-agent-bridge upgrade --check
+cab upgrade --check
 ```
 
 Install the latest published version:
 
 ```bash
-cursor-agent-bridge upgrade
+cab upgrade
 ```
 
 Options:
 
 ```bash
-cursor-agent-bridge upgrade --target 0.1.3
-cursor-agent-bridge upgrade --manager npm
+cab upgrade --target 0.1.3
+cab upgrade --manager npm
 ```
 
 `--check` compares your installed version with npm and exits `1` when a newer
@@ -68,7 +75,7 @@ If you use the optional macOS LaunchAgent, reinstall it after upgrading so the
 service picks up the new binary:
 
 ```bash
-cursor-agent-bridge launch-agent install
+cab launch-agent install
 ```
 
 For local development from this repository, use `git pull`, `pnpm install`, and
@@ -79,7 +86,7 @@ For local development from this repository, use `git pull`, `pnpm install`, and
 Run the bridge in the foreground:
 
 ```bash
-cursor-agent-bridge serve --host 127.0.0.1 --port 4646
+cab serve --host 127.0.0.1 --port 4646
 ```
 
 Configuration:
@@ -106,37 +113,37 @@ processes. On macOS, you can install the optional LaunchAgent to start the
 bridge at login and restart it after crashes:
 
 ```bash
-cursor-agent-bridge launch-agent install
+cab launch-agent install
 ```
 
 Manage the service:
 
 ```bash
-cursor-agent-bridge launch-agent status
-cursor-agent-bridge launch-agent uninstall
+cab launch-agent status
+cab launch-agent uninstall
 ```
 
 The LaunchAgent listens on `127.0.0.1:4646` by default. Skip it if you prefer to
-run `cursor-agent-bridge serve` yourself before starting Codex.
+run `cab serve` yourself before starting Codex.
 
 ## Codex Config
 
 For Codex CLI profile usage, create or update `~/.codex/cursor.config.toml`:
 
 ```bash
-cursor-agent-bridge config write
+cab config write
 ```
 
 Preview the generated profile without writing a file:
 
 ```bash
-cursor-agent-bridge config print
+cab config print
 ```
 
 Validate an existing profile:
 
 ```bash
-cursor-agent-bridge config check
+cab config check
 ```
 
 The generated profile looks like this:
@@ -162,22 +169,23 @@ Use `/model` in Codex to pick a Cursor model. The model catalog comes from
 
 ## Codex IDE Switching
 
-The Codex IDE extension reads the user-level `~/.codex/config.toml`. Switch that file when you want the IDE to use Cursor Agent Bridge:
+The Codex IDE extension reads the user-level `~/.codex/config.toml`. Switch
+that file when you want the IDE to use Cursor Agent Bridge:
 
 ```bash
-cursor-agent-bridge config switch cursor
+cab config switch cursor
 ```
 
 Switch back to Codex's default provider:
 
 ```bash
-cursor-agent-bridge config switch openai
+cab config switch openai
 ```
 
 Check the active provider:
 
 ```bash
-cursor-agent-bridge config switch status
+cab config switch status
 ```
 
 The switch command backs up the previous `~/.codex/config.toml` to
@@ -185,7 +193,7 @@ The switch command backs up the previous `~/.codex/config.toml` to
 that backup with:
 
 ```bash
-cursor-agent-bridge config switch restore
+cab config switch restore
 ```
 
 Reload the Codex IDE window or start a new session after switching. Codex does
@@ -196,14 +204,14 @@ not reliably hot-reload provider changes while a session is running.
 Run a full preflight before starting Codex:
 
 ```bash
-cursor-agent-bridge doctor
+cab doctor
 ```
 
 List available Cursor models without starting the HTTP server:
 
 ```bash
-cursor-agent-bridge models
-cursor-agent-bridge models --json
+cab models
+cab models --json
 ```
 
 If `config write` finds a different `model_provider`, pass `--force` to switch
@@ -219,8 +227,8 @@ POST /v1/chat/completions
 ```
 
 `GET /v1/models` returns an OpenAI-style model list by default. When Codex calls
-the same endpoint with `client_version`, the bridge returns the catalog shape
-Codex expects for `/model`.
+the same endpoint, the bridge returns the catalog shape Codex expects for the
+model selector.
 
 Model lists are cached briefly so the bridge does not spawn
 `agent --list-models` for every request. Pass `refresh=1` to force a refresh.
