@@ -1,8 +1,11 @@
 # cursor-agent-bridge
 
-Responses-compatible API bridge for the Cursor Agent CLI.
+OpenAI-compatible HTTP bridge for the Cursor Agent CLI.
 
-`cursor-agent-bridge` lets Codex and OpenAI-compatible clients use your local Cursor Agent CLI session through a localhost API. It is designed around Codex's current custom-provider requirement for the Responses API while still exposing Chat Completions for simpler clients.
+`cursor-agent-bridge` lets Codex and other OpenAI-compatible clients talk to a
+local Cursor Agent session through `http://127.0.0.1:4646/v1`. It supports the
+Responses API used by Codex custom providers and a Chat Completions endpoint for
+simpler clients.
 
 ## Requirements
 
@@ -10,7 +13,7 @@ Responses-compatible API bridge for the Cursor Agent CLI.
 - pnpm 11+
 - Cursor Agent CLI installed and authenticated
 
-Install Cursor Agent and verify it first:
+Verify Cursor Agent before starting the bridge:
 
 ```bash
 agent login
@@ -23,7 +26,7 @@ agent --list-models
 pnpm add -g cursor-agent-bridge
 ```
 
-During local development:
+For local development:
 
 ```bash
 pnpm install
@@ -32,6 +35,8 @@ pnpm exec cursor-agent-bridge serve
 ```
 
 ## Run
+
+Start the bridge in the foreground:
 
 ```bash
 cursor-agent-bridge serve --host 127.0.0.1 --port 4646
@@ -45,30 +50,29 @@ PORT=4646
 CURSOR_AGENT_PATH=agent
 ```
 
-## macOS LaunchAgent
+## macOS Background Service
 
-Codex connects to the bridge through `base_url`; it does not start the bridge
-process for you. On macOS, install a LaunchAgent if you want the bridge to start
-when you log in and restart automatically if it exits:
+Codex connects to the configured `base_url`; it does not start provider
+processes. On macOS, install the optional LaunchAgent if you want the bridge to
+start at login and restart after crashes:
 
 ```bash
 cursor-agent-bridge launch-agent install
 ```
 
-Manage it with:
+Manage the service:
 
 ```bash
 cursor-agent-bridge launch-agent status
 cursor-agent-bridge launch-agent uninstall
 ```
 
-The LaunchAgent listens on `127.0.0.1:4646` by default. If you prefer manual
-control, skip this step and run `cursor-agent-bridge serve` in a terminal before
-starting Codex.
+The LaunchAgent listens on `127.0.0.1:4646` by default. Skip this step if you
+prefer to run `cursor-agent-bridge serve` manually before starting Codex.
 
 ## Codex Config
 
-Add a Codex profile such as `~/.codex/cursor.config.toml`:
+Create `~/.codex/cursor.config.toml`:
 
 ```toml
 model_provider = "cursor"
@@ -80,13 +84,14 @@ base_url = "http://127.0.0.1:4646/v1"
 wire_api = "responses"
 ```
 
-Start Codex:
+Start Codex with the profile:
 
 ```bash
 codex --profile cursor
 ```
 
-Use `/model` to select a Cursor model. The model catalog is generated from `agent --list-models`.
+Use `/model` inside Codex to pick a Cursor model. The model catalog comes from
+`agent --list-models`.
 
 ## API
 
@@ -97,7 +102,9 @@ POST /v1/responses
 POST /v1/chat/completions
 ```
 
-`GET /v1/models` returns the OpenAI-compatible list by default. When Codex calls it with `client_version`, it returns the Codex model catalog shape expected by `/model`.
+`GET /v1/models` returns an OpenAI-style model list by default. Codex calls the
+same endpoint with `client_version`, and the bridge returns the catalog shape
+Codex expects for `/model`.
 
 ## Examples
 
@@ -117,11 +124,13 @@ curl -sS http://127.0.0.1:4646/v1/chat/completions \
   -d '{"model":"auto","messages":[{"role":"user","content":"Reply OK"}],"stream":false}'
 ```
 
-## Security Notes
+## Security
 
-This server is intended for local use. Bind to `127.0.0.1` unless you are deliberately exposing it on a trusted network.
+Run the bridge on `127.0.0.1` unless you intentionally expose it on a trusted
+network.
 
-Client `Authorization` headers are not forwarded to Cursor Agent. Use Cursor Agent login or `CURSOR_API_KEY` in the bridge process environment.
+The bridge does not forward client `Authorization` headers to Cursor Agent. Use
+Cursor Agent login, or set `CURSOR_API_KEY` in the bridge process environment.
 
 ## Development
 
@@ -130,6 +139,6 @@ pnpm install
 pnpm run ci
 ```
 
-Release publishing is handled by GitHub Actions on tags named `v*`.
-The publish workflow uses npm Trusted Publishing with GitHub OIDC, so it does
-not require an `NPM_TOKEN` repository secret.
+Releases are published by GitHub Actions from `v*` tags. Publishing uses npm
+Trusted Publishing with GitHub OIDC and does not require an `NPM_TOKEN`
+repository secret.
